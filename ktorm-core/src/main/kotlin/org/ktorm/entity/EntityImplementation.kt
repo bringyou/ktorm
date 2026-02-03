@@ -23,6 +23,7 @@ import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.util.*
 import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
 import kotlin.reflect.jvm.javaGetter
 import kotlin.reflect.jvm.jvmName
@@ -71,7 +72,7 @@ internal class EntityImplementation(
     }
 
     private fun handleMethodCall(proxy: Any, method: Method, args: Array<out Any>?): Any? {
-        val ktProp = method.kotlinProperty
+        val ktProp = getKotlinProperty(method)
         if (ktProp != null) {
             val (prop, isGetter) = ktProp
             if (prop.isAbstract) {
@@ -90,7 +91,7 @@ internal class EntityImplementation(
                 return invokeDefaultMethod(proxy, method, args)
             }
         } else {
-            val func = method.kotlinFunction
+            val func = getKotlinFunction(method)
             if (func != null && !func.isAbstract) {
                 return invokeDefaultMethod(proxy, method, args)
             } else {
@@ -285,5 +286,35 @@ internal class EntityImplementation(
 
     companion object {
         private const val serialVersionUID = 1L
+
+        private object NoKotlinProperty
+        private object NoKotlinFunction
+
+        private val kotlinPropertyCache = Collections.synchronizedMap(WeakHashMap<Method, Any?>())
+        private val kotlinFunctionCache = Collections.synchronizedMap(WeakHashMap<Method, Any?>())
+    }
+
+    private fun getKotlinProperty(method: Method): Pair<KProperty1<*, *>, Boolean>? {
+        val cached = kotlinPropertyCache[method]
+        if (cached != null) {
+            @Suppress("UNCHECKED_CAST")
+            return if (cached === NoKotlinProperty) null else cached as Pair<KProperty1<*, *>, Boolean>
+        }
+
+        val value = method.kotlinProperty
+        kotlinPropertyCache[method] = value ?: NoKotlinProperty
+        return value
+    }
+
+    private fun getKotlinFunction(method: Method): KFunction<*>? {
+        val cached = kotlinFunctionCache[method]
+        if (cached != null) {
+            @Suppress("UNCHECKED_CAST")
+            return if (cached === NoKotlinFunction) null else cached as KFunction<*>
+        }
+
+        val value = method.kotlinFunction
+        kotlinFunctionCache[method] = value ?: NoKotlinFunction
+        return value
     }
 }
