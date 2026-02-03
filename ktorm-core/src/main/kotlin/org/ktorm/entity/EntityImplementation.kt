@@ -87,12 +87,12 @@ internal class EntityImplementation(
                     return null
                 }
             } else {
-                return DefaultMethodHandler.forMethod(method).invoke(proxy, args)
+                return invokeDefaultMethod(proxy, method, args)
             }
         } else {
             val func = method.kotlinFunction
             if (func != null && !func.isAbstract) {
-                return DefaultMethodHandler.forMethod(method).invoke(proxy, args)
+                return invokeDefaultMethod(proxy, method, args)
             } else {
                 throw IllegalStateException("Cannot invoke entity abstract method: $method")
             }
@@ -116,13 +116,15 @@ internal class EntityImplementation(
 
         // No need to cache primitive types, enums and string,
         // because their default values always share the same instance.
-        if (type == Boolean::class.javaPrimitiveType) return
-        if (type == Char::class.javaPrimitiveType) return
-        if (type == Byte::class.javaPrimitiveType) return
-        if (type == Short::class.javaPrimitiveType) return
-        if (type == Int::class.javaPrimitiveType) return
-        if (type == Long::class.javaPrimitiveType) return
-        if (type == String::class.java) return
+        when (type) {
+            Boolean::class.javaPrimitiveType,
+            Char::class.javaPrimitiveType,
+            Byte::class.javaPrimitiveType,
+            Short::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+            Long::class.javaPrimitiveType,
+            String::class.java -> return
+        }
         if (type.isEnum) return
 
         // Cache the default value to avoid the weird case that entity.prop !== entity.prop
@@ -146,14 +148,15 @@ internal class EntityImplementation(
     }
 
     private fun doSetProperty(name: String, value: Any?, forceSet: Boolean = false) {
+        val currentValue = values[name]
         if (!forceSet && isPrimaryKey(name) && name in values) {
-            val msg = "Cannot modify the primary key `$name` because it's already set to ${values[name]}"
+            val msg = "Cannot modify the primary key `$name` because it's already set to $currentValue"
             throw UnsupportedOperationException(msg)
         }
 
         // Save property changes and original values.
         if (name !in changedProperties) {
-            changedProperties[name] = values[name]
+            changedProperties[name] = currentValue
         }
 
         values[name] = value
@@ -173,24 +176,6 @@ internal class EntityImplementation(
 
                 entity.implementation.values[name] = copied
             } else {
-                fun serialize(obj: Any): ByteArray {
-                    ByteArrayOutputStream().use { buffer ->
-                        ObjectOutputStream(buffer).use { output ->
-                            output.writeObject(obj)
-                            output.flush()
-                            return buffer.toByteArray()
-                        }
-                    }
-                }
-
-                fun deserialize(bytes: ByteArray): Any {
-                    ByteArrayInputStream(bytes).use { buffer ->
-                        ObjectInputStream(buffer).use { input ->
-                            return input.readObject()
-                        }
-                    }
-                }
-
                 // Deep copy value by serialization.
                 entity.implementation.values[name] = value?.let { deserialize(serialize(it)) }
             }
@@ -273,6 +258,28 @@ internal class EntityImplementation(
             }
 
             append(")")
+        }
+    }
+
+    private fun invokeDefaultMethod(proxy: Any, method: Method, args: Array<out Any>?): Any? {
+        return DefaultMethodHandler.forMethod(method).invoke(proxy, args)
+    }
+
+    private fun serialize(obj: Any): ByteArray {
+        ByteArrayOutputStream().use { buffer ->
+            ObjectOutputStream(buffer).use { output ->
+                output.writeObject(obj)
+                output.flush()
+                return buffer.toByteArray()
+            }
+        }
+    }
+
+    private fun deserialize(bytes: ByteArray): Any {
+        ByteArrayInputStream(bytes).use { buffer ->
+            ObjectInputStream(buffer).use { input ->
+                return input.readObject()
+            }
         }
     }
 
