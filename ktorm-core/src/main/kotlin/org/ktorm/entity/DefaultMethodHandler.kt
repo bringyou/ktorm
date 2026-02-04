@@ -27,7 +27,8 @@ import java.util.*
 
 internal class DefaultMethodHandler(
     private val javaDefaultMethodHandle: MethodHandle? = null,
-    private val kotlinDefaultImplMethod: Method? = null
+    private val kotlinDefaultImplMethod: Method? = null,
+    private val kotlinDefaultImplHandle: MethodHandle? = null
 ) {
 
     fun invoke(proxy: Any, args: Array<out Any>?): Any? {
@@ -37,6 +38,14 @@ internal class DefaultMethodHandler(
                 return bound.invokeWithArguments()
             } else {
                 return bound.invokeWithArguments(*args)
+            }
+        }
+
+        if (kotlinDefaultImplHandle != null) {
+            if (args.isNullOrEmpty()) {
+                return kotlinDefaultImplHandle.invokeWithArguments(proxy)
+            } else {
+                return kotlinDefaultImplHandle.invokeWithArguments(proxy, *args)
             }
         }
 
@@ -124,7 +133,11 @@ internal class DefaultMethodHandler(
                     val classLoader = method.declaringClass.classLoader
                     val cls = Class.forName(method.declaringClass.name + "\$DefaultImpls", true, classLoader)
                     val impl = cls.getMethod(method.name, method.declaringClass, *method.parameterTypes)
-                    DefaultMethodHandler(kotlinDefaultImplMethod = impl)
+                    val handle = MethodHandles.lookup().unreflect(impl)
+                    DefaultMethodHandler(
+                        kotlinDefaultImplMethod = impl,
+                        kotlinDefaultImplHandle = handle
+                    )
                 }
             }
         }
