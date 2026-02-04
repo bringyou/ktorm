@@ -32,15 +32,16 @@ internal class DefaultMethodHandler(
 
     fun invoke(proxy: Any, args: Array<out Any>?): Any? {
         if (javaDefaultMethodHandle != null) {
-            if (args == null) {
-                return javaDefaultMethodHandle.bindTo(proxy).invokeWithArguments()
+            val bound = javaDefaultMethodHandle.bindTo(proxy)
+            if (args.isNullOrEmpty()) {
+                return bound.invokeWithArguments()
             } else {
-                return javaDefaultMethodHandle.bindTo(proxy).invokeWithArguments(*args)
+                return bound.invokeWithArguments(*args)
             }
         }
 
         if (kotlinDefaultImplMethod != null) {
-            if (args == null) {
+            if (args.isNullOrEmpty()) {
                 return kotlinDefaultImplMethod.invoke0(null, proxy)
             } else {
                 return kotlinDefaultImplMethod.invoke0(null, proxy, *args)
